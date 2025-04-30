@@ -14,6 +14,7 @@ class FacebookScraperGUI:
         
         self.setup_ui()
         self.is_scraping = False
+        self.stop_event = threading.Event()
         self.current_results = []
         
     def setup_ui(self):
@@ -44,6 +45,15 @@ class FacebookScraperGUI:
             command=self.start_scraping
         )
         self.start_btn.pack(side=tk.LEFT, padx=5)
+        
+        # Stop scraping button
+        self.stop_btn = ttk.Button(
+            button_frame, 
+            text="Stop Scraping", 
+            command=self.stop_scraping,
+            state=tk.DISABLED
+        )
+        self.stop_btn.pack(side=tk.LEFT, padx=5)
         
         # Save results button
         self.save_btn = ttk.Button(
@@ -144,12 +154,23 @@ class FacebookScraperGUI:
         self.current_results = []
         self.progress_var.set(0)
         self.save_btn.config(state=tk.DISABLED)
+        self.start_btn.config(state=tk.DISABLED)
+        self.stop_btn.config(state=tk.NORMAL)
+        self.stop_event.clear()
         
         # Start scraping in a separate thread
         self.is_scraping = True
         threading.Thread(target=self.run_scraper, args=(business_list,), daemon=True).start()
     
+    def stop_scraping(self):
+        """Signal the scraping thread to stop"""
+        if self.is_scraping:
+            self.stop_event.set()
+            self.status_var.set("Stopping...")
+            self.stop_btn.config(state=tk.DISABLED)
+    
     def run_scraper(self, business_list):
+        scraper = None
         try:
             # Create a temporary file for the scraper
             temp_file = "temp_business_list.txt"
@@ -168,6 +189,11 @@ class FacebookScraperGUI:
                 total = len(businesses)
                 
                 for i, business_name in enumerate(businesses):
+                    # Check if stop signal received
+                    if self.stop_event.is_set():
+                        self.root.after(0, self.scraping_stopped)
+                        break
+
                     # Update progress
                     progress_pct = (i / total) * 100
                     self.progress_var.set(progress_pct)
@@ -198,15 +224,12 @@ class FacebookScraperGUI:
                     # Small delay between requests
                     time.sleep(2)
                 
-                # Save results to temp file
-                scraper.results = self.current_results
-                scraper.save_results()
-                
-                # Clean up
-                scraper.driver.quit()
-                
-                # Update UI when complete
-                self.root.after(0, self.scraping_complete)
+                # Save results to temp file if not stopped early
+                if not self.stop_event.is_set():
+                    scraper.results = self.current_results
+                    scraper.save_results()
+                    # Update UI when complete
+                    self.root.after(0, self.scraping_complete)
             
             # Replace run method
             scraper.run = run_with_progress
@@ -218,6 +241,14 @@ class FacebookScraperGUI:
         except Exception as e:
             self.root.after(0, lambda: self.show_error(str(e)))
         finally:
+            # Clean up WebDriver and temp files
+            if scraper and hasattr(scraper, 'driver') and scraper.driver:
+                try:
+                    scraper.driver.quit()
+                    print("WebDriver quit successfully in finally block.")
+                except Exception as quit_err:
+                    print(f"Error quitting WebDriver in finally block: {quit_err}")
+            
             # Clean up temp files
             if os.path.exists("temp_business_list.txt"):
                 try:
@@ -235,12 +266,28 @@ class FacebookScraperGUI:
         self.progress_var.set(100)
         self.status_var.set(f"Completed! Found {sum(1 for r in self.current_results if r[1] not in ['No email found', 'Has website', 'Not accessible'])} emails")
         self.save_btn.config(state=tk.NORMAL)
+        self.start_btn.config(state=tk.NORMAL)
+        self.stop_btn.config(state=tk.DISABLED)
         messagebox.showinfo("Complete", "Scraping completed successfully!")
+    
+    def scraping_stopped(self):
+        """Called when scraping is stopped by the user"""
+        self.is_scraping = False
+        self.status_var.set(f"Scraping stopped by user. {len(self.current_results)} results gathered.")
+        self.start_btn.config(state=tk.NORMAL)
+        self.stop_btn.config(state=tk.DISABLED)
+        if self.current_results:
+            self.save_btn.config(state=tk.NORMAL)
+        messagebox.showinfo("Stopped", "Scraping process stopped.")
     
     def show_error(self, error_msg):
         """Show error message"""
         self.is_scraping = False
         self.status_var.set("Error occurred")
+        self.start_btn.config(state=tk.NORMAL)
+        self.stop_btn.config(state=tk.DISABLED)
+        if self.current_results:
+            self.save_btn.config(state=tk.NORMAL)
         messagebox.showerror("Error", f"An error occurred during scraping:\n{error_msg}")
     
     def save_results(self):
