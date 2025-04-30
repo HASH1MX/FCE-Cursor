@@ -10,6 +10,7 @@ This Python application searches Facebook for businesses without websites and ex
 - Checks if the business has a website
 - Extracts email addresses for businesses without websites
 - Saves results to a CSV file
+- Provides a user-friendly GUI interface
 
 ## Requirements
 
@@ -27,6 +28,8 @@ pip install -r requirements.txt
 
 ## Usage
 
+### Command Line Version
+
 1. Create a text file named `business_list.txt` with one business name per line
 2. Run the script:
 
@@ -36,6 +39,19 @@ python facebook_email_scraper.py
 
 3. Enter your Facebook login credentials when prompted
 4. The script will process each business and save results to `business_emails.csv`
+
+### GUI Version
+
+1. Run the GUI application:
+
+```
+python facebook_scraper_gui.py
+```
+
+2. Enter business names in the text area (one per line) or load from a file using the "Load Names from File" button
+3. Click "Start Scraping" to begin the extraction process
+4. Monitor progress with the progress bar and status updates
+5. When complete, view results in the table and save them to a CSV file using the "Save Results" button
 
 ## Important Notes
 
